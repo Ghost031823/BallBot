@@ -181,12 +181,14 @@ class TicketsCog(commands.Cog):
                 topic=f"{ticket_type}|{interaction.user.id}",
             )
         except discord.Forbidden:
+            self.bot.db.release_ticket_counter(interaction.guild.id, number)
             await interaction.response.send_message(
                 embed=error_embed("Missing Permissions", "I cannot create ticket channels in the configured category."),
                 ephemeral=True,
             )
             return
         except discord.HTTPException:
+            self.bot.db.release_ticket_counter(interaction.guild.id, number)
             await interaction.response.send_message(
                 embed=error_embed("Discord Error", "Discord rejected the ticket channel creation."),
                 ephemeral=True,
@@ -255,7 +257,6 @@ class TicketsCog(commands.Cog):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        transcript_path = Path("data/transcripts") / f"{interaction.guild.id}-{ticket['number']:04d}.html"
         absolute_transcript = Path(self.bot.db.path).parent / "transcripts" / f"{interaction.guild.id}-{ticket['number']:04d}.html"
         saved_path = await save_ticket_transcript(interaction.channel, absolute_transcript)
 
@@ -281,7 +282,7 @@ class TicketsCog(commands.Cog):
             return
 
         transcript_url = transcript_message.jump_url
-        self.bot.db.close_ticket(interaction.channel.id, str(transcript_path), transcript_url)
+        self.bot.db.close_ticket(interaction.channel.id, str(saved_path), transcript_url)
 
         opener = interaction.guild.get_member(ticket["opener_id"])
         if opener is not None:

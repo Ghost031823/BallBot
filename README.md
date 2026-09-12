@@ -48,8 +48,7 @@ Enable these privileged and standard intents in the Discord developer portal and
 - `guilds`
 - `members`
 - `messages`
-
-`message_content` is not required for the included transcript flow because transcripts are generated from channel history.
+- `message_content` for complete ticket transcript message bodies
 
 ## Recommended Bot Permissions
 

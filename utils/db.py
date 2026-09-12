@@ -245,6 +245,18 @@ class Database:
             ).fetchone()
         return int(row["ticket_counter"])
 
+    def release_ticket_counter(self, guild_id: int, reserved_number: int) -> None:
+        self._ensure_guild(guild_id)
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                UPDATE guild_config
+                SET ticket_counter = ticket_counter - 1
+                WHERE guild_id = ? AND ticket_counter = ?
+                """,
+                (guild_id, reserved_number),
+            )
+
     def create_ticket(
         self,
         *,
