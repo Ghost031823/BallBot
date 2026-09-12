@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -8,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from utils.db import utcnow_iso
+from utils.db import normalize_utc_iso, utcnow_iso
 from utils.embeds import error_embed, info_embed, success_embed, warning_embed
 
 if TYPE_CHECKING:
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
 
 
 def parse_timestamp(value: str) -> datetime:
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
     return datetime.fromisoformat(value)
 
 
@@ -111,7 +114,9 @@ class GiveawaysCog(commands.GroupCog, group_name="giveaway", group_description="
         if giveaway["ended"]:
             return False, "Giveaway already ended."
 
-        self.bot.db.end_giveaway(giveaway["id"])
+        if not self.bot.db.claim_giveaway_end(giveaway["id"]):
+            return False, "Giveaway already ended."
+
         giveaway["ended"] = 1
         entrants = self.bot.db.list_giveaway_entries(giveaway["id"])
         guild = self.bot.get_guild(giveaway["guild_id"])
@@ -294,13 +299,13 @@ class GiveawaysCog(commands.GroupCog, group_name="giveaway", group_description="
                 title=title,
                 description=description,
                 winners_count=winners,
-                end_at=ends_at.isoformat(),
+                end_at=normalize_utc_iso(ends_at),
                 required_role_id=required_role_id,
             )
             giveaway = self.bot.db.get_giveaway(giveaway_id)
             if giveaway:
                 await self.update_giveaway_message(giveaway)
-        except Exception:
+        except sqlite3.Error:
             try:
                 await message.delete()
             except (discord.Forbidden, discord.HTTPException):

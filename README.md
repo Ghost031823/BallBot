@@ -28,7 +28,8 @@ BallBot is a production-ready Discord bot scaffold built with Python 3.11+, `dis
    ```
 
 4. Copy `.env.example` to `.env` and fill in your bot token.
-5. Start the bot:
+5. Enable the `Members` and `Message Content` intents for the bot in the Discord developer portal before the first run.
+6. Start the bot:
 
    ```bash
    python bot.py

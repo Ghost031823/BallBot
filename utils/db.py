@@ -9,7 +9,11 @@ from typing import Any
 
 
 def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def normalize_utc_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 class Database:
@@ -246,18 +250,6 @@ class Database:
             ).fetchone()
         return int(row["ticket_counter"])
 
-    def release_ticket_counter(self, guild_id: int, reserved_number: int) -> None:
-        self._ensure_guild(guild_id)
-        with self._lock, self._connection:
-            self._connection.execute(
-                """
-                UPDATE guild_config
-                SET ticket_counter = ticket_counter - 1
-                WHERE guild_id = ? AND ticket_counter = ?
-                """,
-                (guild_id, reserved_number),
-            )
-
     def create_ticket(
         self,
         *,
@@ -289,6 +281,29 @@ class Database:
                 (channel_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def claim_giveaway_end(self, giveaway_id: int) -> bool:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE giveaways SET ended = 1 WHERE id = ? AND ended = 0",
+                (giveaway_id,),
+            )
+        return cursor.rowcount > 0
+
+    def claim_ticket_close(self, channel_id: int) -> bool:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "UPDATE tickets SET status = 'closing' WHERE channel_id = ? AND status = 'open'",
+                (channel_id,),
+            )
+        return cursor.rowcount > 0
+
+    def reopen_ticket(self, channel_id: int) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                "UPDATE tickets SET status = 'open' WHERE channel_id = ? AND status = 'closing'",
+                (channel_id,),
+            )
 
     def close_ticket(self, channel_id: int, transcript_path: str, transcript_url: str) -> None:
         with self._lock, self._connection:

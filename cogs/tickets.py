@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from typing import TYPE_CHECKING
 
 import discord
@@ -86,6 +87,19 @@ class TicketCloseView(discord.ui.View):
 class TicketsCog(commands.Cog):
     def __init__(self, bot: BallBot) -> None:
         self.bot = bot
+
+    async def rollback_ticket_open(
+        self,
+        channel: discord.TextChannel,
+        *,
+        delete_record: bool,
+    ) -> None:
+        if delete_record:
+            self.bot.db.delete_ticket_by_channel(channel.id)
+        try:
+            await channel.delete(reason="Rollback failed ticket initialization")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
     def build_panel_embed(self) -> discord.Embed:
         embed = info_embed("Support Tickets", "Choose a ticket type from the dropdown below to open a private support channel.")
@@ -203,12 +217,8 @@ class TicketsCog(commands.Cog):
                 channel_id=ticket_channel.id,
                 ticket_type=ticket_type,
             )
-        except Exception:
-            self.bot.db.release_ticket_counter(interaction.guild.id, number)
-            try:
-                await ticket_channel.delete(reason="Rollback failed ticket initialization")
-            except (discord.Forbidden, discord.HTTPException):
-                pass
+        except sqlite3.Error:
+            await self.rollback_ticket_open(ticket_channel, delete_record=False)
             await interaction.response.send_message(
                 embed=error_embed("Database Error", "I could not store the new ticket record."),
                 ephemeral=True,
@@ -221,24 +231,14 @@ class TicketsCog(commands.Cog):
                 view=TicketCloseView(),
             )
         except discord.Forbidden:
-            self.bot.db.delete_ticket_by_channel(ticket_channel.id)
-            self.bot.db.release_ticket_counter(interaction.guild.id, number)
-            try:
-                await ticket_channel.delete(reason="Rollback failed ticket initialization")
-            except (discord.Forbidden, discord.HTTPException):
-                pass
+            await self.rollback_ticket_open(ticket_channel, delete_record=True)
             await interaction.response.send_message(
                 embed=error_embed("Missing Permissions", "I created the ticket channel but could not initialize it."),
                 ephemeral=True,
             )
             return
         except discord.HTTPException:
-            self.bot.db.delete_ticket_by_channel(ticket_channel.id)
-            self.bot.db.release_ticket_counter(interaction.guild.id, number)
-            try:
-                await ticket_channel.delete(reason="Rollback failed ticket initialization")
-            except (discord.Forbidden, discord.HTTPException):
-                pass
+            await self.rollback_ticket_open(ticket_channel, delete_record=True)
             await interaction.response.send_message(
                 embed=error_embed("Discord Error", "Discord rejected the initial ticket message."),
                 ephemeral=True,
@@ -271,6 +271,12 @@ class TicketsCog(commands.Cog):
                 ephemeral=True,
             )
             return
+        if ticket["status"] == "closing":
+            await interaction.response.send_message(
+                embed=warning_embed("Already Closing", "This ticket is already being closed."),
+                ephemeral=True,
+            )
+            return
 
         config = self.bot.db.get_guild_config(interaction.guild.id)
         if not self.can_manage_ticket(interaction.user, ticket, config):
@@ -280,8 +286,16 @@ class TicketsCog(commands.Cog):
             )
             return
 
+        if not self.bot.db.claim_ticket_close(interaction.channel.id):
+            await interaction.response.send_message(
+                embed=warning_embed("Already Closing", "This ticket is already being closed or has already been closed."),
+                ephemeral=True,
+            )
+            return
+
         transcript_channel_id = config.get("ticket_transcript_channel_id")
         if not transcript_channel_id:
+            self.bot.db.reopen_ticket(interaction.channel.id)
             await interaction.response.send_message(
                 embed=warning_embed("Missing Configuration", "Set a ticket transcript channel before closing tickets."),
                 ephemeral=True,
@@ -290,6 +304,7 @@ class TicketsCog(commands.Cog):
 
         transcript_channel = interaction.guild.get_channel(transcript_channel_id)
         if not isinstance(transcript_channel, discord.TextChannel):
+            self.bot.db.reopen_ticket(interaction.channel.id)
             await interaction.response.send_message(
                 embed=error_embed("Missing Channel", "The configured transcript channel no longer exists."),
                 ephemeral=True,
@@ -299,7 +314,15 @@ class TicketsCog(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         absolute_transcript = Path(self.bot.db.path).parent / "transcripts" / f"{interaction.guild.id}-{ticket['number']:04d}-{interaction.channel.id}.html"
-        saved_path = await save_ticket_transcript(interaction.channel, absolute_transcript)
+        try:
+            saved_path = await save_ticket_transcript(interaction.channel, absolute_transcript)
+        except OSError:
+            self.bot.db.reopen_ticket(interaction.channel.id)
+            await interaction.followup.send(
+                embed=error_embed("Transcript Error", "I could not write the transcript file."),
+                ephemeral=True,
+            )
+            return
 
         try:
             transcript_message = await transcript_channel.send(
@@ -310,6 +333,7 @@ class TicketsCog(commands.Cog):
                 file=discord.File(saved_path, filename=saved_path.name),
             )
         except discord.Forbidden:
+            self.bot.db.reopen_ticket(interaction.channel.id)
             saved_path.unlink(missing_ok=True)
             await interaction.followup.send(
                 embed=error_embed("Missing Permissions", "I cannot post transcripts in the configured channel."),
@@ -317,6 +341,7 @@ class TicketsCog(commands.Cog):
             )
             return
         except discord.HTTPException:
+            self.bot.db.reopen_ticket(interaction.channel.id)
             saved_path.unlink(missing_ok=True)
             await interaction.followup.send(
                 embed=error_embed("Discord Error", "Discord rejected the transcript upload."),
