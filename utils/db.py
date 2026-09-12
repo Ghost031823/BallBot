@@ -278,6 +278,10 @@ class Database:
             )
             return int(cursor.lastrowid)
 
+    def delete_ticket_by_channel(self, channel_id: int) -> None:
+        with self._lock, self._connection:
+            self._connection.execute("DELETE FROM tickets WHERE channel_id = ?", (channel_id,))
+
     def get_ticket_by_channel(self, channel_id: int) -> dict[str, Any] | None:
         with self._lock:
             row = self._connection.execute(

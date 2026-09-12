@@ -196,11 +196,32 @@ class TicketsCog(commands.Cog):
             return
 
         try:
+            self.bot.db.create_ticket(
+                guild_id=interaction.guild.id,
+                number=number,
+                opener_id=interaction.user.id,
+                channel_id=ticket_channel.id,
+                ticket_type=ticket_type,
+            )
+        except Exception:
+            self.bot.db.release_ticket_counter(interaction.guild.id, number)
+            try:
+                await ticket_channel.delete(reason="Rollback failed ticket initialization")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            await interaction.response.send_message(
+                embed=error_embed("Database Error", "I could not store the new ticket record."),
+                ephemeral=True,
+            )
+            return
+
+        try:
             await ticket_channel.send(
                 embed=self.build_welcome_embed(interaction.user, ticket_type, number),
                 view=TicketCloseView(),
             )
         except discord.Forbidden:
+            self.bot.db.delete_ticket_by_channel(ticket_channel.id)
             self.bot.db.release_ticket_counter(interaction.guild.id, number)
             try:
                 await ticket_channel.delete(reason="Rollback failed ticket initialization")
@@ -212,6 +233,7 @@ class TicketsCog(commands.Cog):
             )
             return
         except discord.HTTPException:
+            self.bot.db.delete_ticket_by_channel(ticket_channel.id)
             self.bot.db.release_ticket_counter(interaction.guild.id, number)
             try:
                 await ticket_channel.delete(reason="Rollback failed ticket initialization")
@@ -222,14 +244,6 @@ class TicketsCog(commands.Cog):
                 ephemeral=True,
             )
             return
-
-        self.bot.db.create_ticket(
-            guild_id=interaction.guild.id,
-            number=number,
-            opener_id=interaction.user.id,
-            channel_id=ticket_channel.id,
-            ticket_type=ticket_type,
-        )
         await interaction.response.send_message(
             embed=success_embed("Ticket Opened", f"Your ticket is ready: {ticket_channel.mention}"),
             ephemeral=True,

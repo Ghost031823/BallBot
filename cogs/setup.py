@@ -199,6 +199,7 @@ class SetupCog(commands.GroupCog, group_name="setup", group_description="Owner-o
 
         config = self.bot.db.get_guild_config(interaction.guild.id)
         chain_roles = self.bot.db.get_chain_roles(interaction.guild.id)
+        category = interaction.guild.get_channel(config["ticket_category_id"]) if config.get("ticket_category_id") else None
         embed = info_embed("Setup Status", "Current BallBot configuration for this server.")
         embed.add_field(
             name="Giveaway Required Role",
@@ -222,7 +223,13 @@ class SetupCog(commands.GroupCog, group_name="setup", group_description="Owner-o
         )
         embed.add_field(
             name="Ticket Category",
-            value=f"<#{config['ticket_category_id']}>" if config.get("ticket_category_id") else "Not configured",
+            value=(
+                category.name
+                if isinstance(category, discord.CategoryChannel)
+                else f"Missing category (`{config['ticket_category_id']}`)"
+                if config.get("ticket_category_id")
+                else "Not configured"
+            ),
             inline=False,
         )
         staff_roles = config.get("ticket_staff_role_ids", [])

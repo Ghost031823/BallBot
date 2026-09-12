@@ -35,10 +35,24 @@ class ChainCog(commands.GroupCog, group_name="chain", group_description="Chain o
                 continue
 
             members = sorted(role.members, key=lambda member: member.display_name.lower())
-            holders = "\n".join(member.mention for member in members) if members else "Vacant"
+            holders = self.render_role_holders(members)
             embed.add_field(name=f"{index}. {role.mention}", value=holders, inline=False)
 
         return embed
+
+    def render_role_holders(self, members: list[discord.Member]) -> str:
+        if not members:
+            return "Vacant"
+
+        lines: list[str] = []
+        for member in members:
+            next_value = "\n".join(lines + [member.mention])
+            if len(next_value) > 1000:
+                remaining = len(members) - len(lines)
+                lines.append(f"...and {remaining} more")
+                break
+            lines.append(member.mention)
+        return "\n".join(lines)
 
     async def refresh_chain_for_guild(self, guild: discord.Guild) -> tuple[bool, str]:
         config = self.bot.db.get_guild_config(guild.id)

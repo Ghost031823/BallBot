@@ -317,11 +317,11 @@ class GiveawaysCog(commands.GroupCog, group_name="giveaway", group_description="
             )
             return
 
-        _, message = await self.finish_giveaway(giveaway)
-        if giveaway["ended"]:
-            embed = warning_embed("Giveaway Updated", message)
-        else:
+        ended_now, message = await self.finish_giveaway(giveaway)
+        if ended_now:
             embed = success_embed("Giveaway Updated", message)
+        else:
+            embed = warning_embed("Giveaway Updated", message)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="reroll", description="Pick a fresh winner set for an ended giveaway.")
