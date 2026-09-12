@@ -102,7 +102,10 @@ class GiveawaysCog(commands.GroupCog, group_name="giveaway", group_description="
             entries=self.bot.db.count_giveaway_entries(giveaway["id"]),
             ended=bool(giveaway["ended"]),
         )
-        await message.edit(embed=embed, view=None if giveaway["ended"] else GiveawayEntryView())
+        try:
+            await message.edit(embed=embed, view=None if giveaway["ended"] else GiveawayEntryView())
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return
 
     async def finish_giveaway(self, giveaway: dict) -> tuple[bool, str]:
         if giveaway["ended"]:
@@ -315,7 +318,11 @@ class GiveawaysCog(commands.GroupCog, group_name="giveaway", group_description="
             return
 
         _, message = await self.finish_giveaway(giveaway)
-        await interaction.response.send_message(embed=success_embed("Giveaway Updated", message), ephemeral=True)
+        if giveaway["ended"]:
+            embed = warning_embed("Giveaway Updated", message)
+        else:
+            embed = success_embed("Giveaway Updated", message)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="reroll", description="Pick a fresh winner set for an ended giveaway.")
     @app_commands.default_permissions(manage_guild=True)

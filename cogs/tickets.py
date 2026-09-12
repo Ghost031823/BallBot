@@ -195,6 +195,34 @@ class TicketsCog(commands.Cog):
             )
             return
 
+        try:
+            await ticket_channel.send(
+                embed=self.build_welcome_embed(interaction.user, ticket_type, number),
+                view=TicketCloseView(),
+            )
+        except discord.Forbidden:
+            self.bot.db.release_ticket_counter(interaction.guild.id, number)
+            try:
+                await ticket_channel.delete(reason="Rollback failed ticket initialization")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            await interaction.response.send_message(
+                embed=error_embed("Missing Permissions", "I created the ticket channel but could not initialize it."),
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException:
+            self.bot.db.release_ticket_counter(interaction.guild.id, number)
+            try:
+                await ticket_channel.delete(reason="Rollback failed ticket initialization")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            await interaction.response.send_message(
+                embed=error_embed("Discord Error", "Discord rejected the initial ticket message."),
+                ephemeral=True,
+            )
+            return
+
         self.bot.db.create_ticket(
             guild_id=interaction.guild.id,
             number=number,
@@ -202,7 +230,6 @@ class TicketsCog(commands.Cog):
             channel_id=ticket_channel.id,
             ticket_type=ticket_type,
         )
-        await ticket_channel.send(embed=self.build_welcome_embed(interaction.user, ticket_type, number), view=TicketCloseView())
         await interaction.response.send_message(
             embed=success_embed("Ticket Opened", f"Your ticket is ready: {ticket_channel.mention}"),
             ephemeral=True,
@@ -286,20 +313,45 @@ class TicketsCog(commands.Cog):
         transcript_url = transcript_message.jump_url
         self.bot.db.close_ticket(interaction.channel.id, str(saved_path), transcript_url)
 
-        opener = interaction.guild.get_member(ticket["opener_id"])
-        if opener is not None:
-            await interaction.channel.set_permissions(
-                opener,
-                view_channel=True,
-                send_messages=False,
-                read_message_history=True,
-            )
+        try:
+            opener = interaction.guild.get_member(ticket["opener_id"])
+            if opener is not None:
+                await interaction.channel.set_permissions(
+                    opener,
+                    view_channel=True,
+                    send_messages=False,
+                    read_message_history=True,
+                )
 
-        await interaction.channel.edit(name=f"closed-{ticket['number']:04d}")
-        await interaction.channel.send(
-            embed=info_embed("Ticket Closed", f"Transcript saved. Use the button below to open it."),
-            view=TranscriptLinkView(transcript_url),
-        )
+            for role_id in config.get("ticket_staff_role_ids", []):
+                role = interaction.guild.get_role(role_id)
+                if role is not None:
+                    await interaction.channel.set_permissions(
+                        role,
+                        view_channel=True,
+                        send_messages=False,
+                        read_message_history=True,
+                        attach_files=False,
+                    )
+
+            await interaction.channel.edit(name=f"closed-{ticket['number']:04d}")
+            await interaction.channel.send(
+                embed=info_embed("Ticket Closed", "Transcript saved. Use the button below to open it."),
+                view=TranscriptLinkView(transcript_url),
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                embed=warning_embed("Partially Closed", "The transcript was saved, but I could not fully lock the ticket channel."),
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(
+                embed=warning_embed("Partially Closed", "The transcript was saved, but Discord rejected part of the channel close flow."),
+                ephemeral=True,
+            )
+            return
+
         await interaction.followup.send(
             embed=success_embed("Ticket Closed", "The transcript has been generated and the ticket is now read-only."),
             ephemeral=True,
