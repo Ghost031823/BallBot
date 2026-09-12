@@ -25,6 +25,7 @@ class BallBot(commands.Bot):
         intents.guilds = True
         intents.members = True
         intents.messages = True
+        intents.message_content = True
 
         super().__init__(
             command_prefix=commands.when_mentioned,

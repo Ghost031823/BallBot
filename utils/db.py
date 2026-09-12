@@ -23,6 +23,7 @@ class Database:
     def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock, self._connection:
+            self._connection.execute("PRAGMA foreign_keys = ON")
             self._connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS guild_config (

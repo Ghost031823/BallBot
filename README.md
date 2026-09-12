@@ -50,6 +50,8 @@ Enable these privileged and standard intents in the Discord developer portal and
 - `messages`
 - `message_content` for complete ticket transcript message bodies
 
+The bot enables these intents in `bot.py`, and the same intents must also be enabled for the application in the Discord developer portal.
+
 ## Recommended Bot Permissions
 
 - View Channels

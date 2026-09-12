@@ -269,12 +269,14 @@ class TicketsCog(commands.Cog):
                 file=discord.File(saved_path, filename=saved_path.name),
             )
         except discord.Forbidden:
+            saved_path.unlink(missing_ok=True)
             await interaction.followup.send(
                 embed=error_embed("Missing Permissions", "I cannot post transcripts in the configured channel."),
                 ephemeral=True,
             )
             return
         except discord.HTTPException:
+            saved_path.unlink(missing_ok=True)
             await interaction.followup.send(
                 embed=error_embed("Discord Error", "Discord rejected the transcript upload."),
                 ephemeral=True,
