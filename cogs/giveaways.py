@@ -285,20 +285,31 @@ class GiveawaysCog(commands.GroupCog, group_name="giveaway", group_description="
             )
             return
 
-        giveaway_id = self.bot.db.create_giveaway(
-            guild_id=interaction.guild.id,
-            channel_id=target_channel.id,
-            message_id=message.id,
-            host_id=interaction.user.id,
-            title=title,
-            description=description,
-            winners_count=winners,
-            end_at=ends_at.isoformat(),
-            required_role_id=required_role_id,
-        )
-        giveaway = self.bot.db.get_giveaway(giveaway_id)
-        if giveaway:
-            await self.update_giveaway_message(giveaway)
+        try:
+            giveaway_id = self.bot.db.create_giveaway(
+                guild_id=interaction.guild.id,
+                channel_id=target_channel.id,
+                message_id=message.id,
+                host_id=interaction.user.id,
+                title=title,
+                description=description,
+                winners_count=winners,
+                end_at=ends_at.isoformat(),
+                required_role_id=required_role_id,
+            )
+            giveaway = self.bot.db.get_giveaway(giveaway_id)
+            if giveaway:
+                await self.update_giveaway_message(giveaway)
+        except Exception:
+            try:
+                await message.delete()
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            await interaction.response.send_message(
+                embed=error_embed("Database Error", "I could not store the giveaway after posting it."),
+                ephemeral=True,
+            )
+            return
 
         role_note = f"Restricted to <@&{required_role_id}>." if required_role_id else "No role restriction configured."
         await interaction.response.send_message(

@@ -298,7 +298,7 @@ class TicketsCog(commands.Cog):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        absolute_transcript = Path(self.bot.db.path).parent / "transcripts" / f"{interaction.guild.id}-{ticket['number']:04d}.html"
+        absolute_transcript = Path(self.bot.db.path).parent / "transcripts" / f"{interaction.guild.id}-{ticket['number']:04d}-{interaction.channel.id}.html"
         saved_path = await save_ticket_transcript(interaction.channel, absolute_transcript)
 
         try:

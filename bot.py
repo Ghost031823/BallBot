@@ -14,6 +14,7 @@ from cogs.tickets import TicketCloseView, TicketPanelView
 from utils.db import Database
 
 
+load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
@@ -58,8 +59,6 @@ class BallBot(commands.Bot):
 
 
 async def main() -> None:
-    load_dotenv()
-
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise RuntimeError("BOT_TOKEN is not set.")
